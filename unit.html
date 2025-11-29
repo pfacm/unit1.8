@@ -121,7 +121,27 @@
             </div>
             <div class="card">
                 <h2 class="text-xl font-semibold mb-3 text-purple-400">⛓️ Cadeia L2: META_GAME_ZONE</h2>
+                <div class="flex items-center justify-between mb-3">
+                    <div class="text-sm text-gray-300">Mineração L2:</div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-xs text-gray-300">Auto</label>
+                        <input type="checkbox" id="auto-mine-l2-toggle" class="form-checkbox h-4 w-4" onchange="toggleAutoMiningL2()">
+                        <button onclick="mineBlockL2()" class="btn-secondary text-xs px-3">Mineração L2 Manual</button>
+                    </div>
+                </div>
                 <div id="chain-display-l2" class="text-xs font-mono rounded"></div>
+            </div>
+            <div class="card">
+                <h2 class="text-xl font-semibold mb-3 text-green-400">📦 Snapshot / Backup</h2>
+                <p class="text-sm text-gray-300 mb-2">Exporte ou importe o estado completo do nó (chains, saldos, pending txs).</p>
+                <div class="flex gap-2 mb-2">
+                    <button onclick="exportSnapshot()" class="btn-primary w-1/2">Exportar Snapshot</button>
+                    <label class="btn-secondary w-1/2 text-center cursor-pointer">
+                        Importar
+                        <input type="file" id="snapshot-file" accept="application/json" onchange="importSnapshot(event)" style="display:none" />
+                    </label>
+                </div>
+                <p class="text-xs text-gray-400">Dica: o snapshot contém o estado simulado. Não contém segredos reais.</p>
             </div>
         </div>
     </main>
@@ -136,6 +156,7 @@
             id: '...',
             walletAddress: 'Aguardando Login...',
             chains: {}, 
+            pendingSidechainTransactions: [],
             pendingTransactions: [],
             pendingStake: 0, 
             stake: 0,
@@ -163,6 +184,121 @@
             if (type === 'bridge') color = 'text-indigo-300';
             const logEntry = `<div class="${color}">[${now}] ${msg}</div>`;
             logsDiv.innerHTML = logEntry + logsDiv.innerHTML;
+        }
+
+        // =========================================================
+        // L2 (META_GAME_ZONE) MINING & HELPERS
+        // =========================================================
+
+        async function mineBlockL2() {
+            const chainId = SIDE_CHAIN_ID;
+            if (!node.chains[chainId]) return;
+
+            const chain = node.chains[chainId];
+            if (node.pendingSidechainTransactions.length === 0) {
+                log('Nenhuma transação pendente na L2.', 'warning');
+                return;
+            }
+
+            // Simple L2 mining: low difficulty, fast confirmation
+            const prev = chain[chain.length - 1];
+            let nonce = 0;
+            let hash = '';
+            const start = Date.now();
+
+            log(`⛏️ Minerando Bloco L2 ${prev.index + 1}...`, 'warning');
+
+            // collect up to 50 pending L2 txs
+            const txsForBlock = node.pendingSidechainTransactions.splice(0, 50);
+
+            const block = { index: prev.index + 1, timestamp: Date.now(), data: {}, prevHash: prev.hash, nonce: 0, chainId, miner: 'L2_MINER', transactions: txsForBlock };
+            // quick PoW simulation for L2 (2 zeros)
+            while (true) {
+                nonce++;
+                block.nonce = nonce;
+                hash = await hashBlock(block);
+                if (hash.startsWith('00')) break;
+                if (nonce % 10000 === 0) await new Promise(r => setTimeout(r, 0));
+            }
+
+            block.hash = hash;
+            chain.push(block);
+
+            // Process L2 transactions (mainly BRIDGE_OUTs arriving to L2 recipients)
+            block.transactions.forEach(tx => {
+                if (tx.type === 'BRIDGE_OUT') {
+                    // For this simulation, the sideChainBalance already increased on bridgeToSidechain()
+                    log(`L2: BRIDGE_OUT confirmado (${tx.amount.toFixed ? tx.amount.toFixed(10) : tx.amount} UNIT)`, 'bridge');
+                }
+            });
+
+            const took = ((Date.now() - start) / 1000).toFixed(2);
+            log(`✅ Bloco L2 ${block.index} minerado (${took}s)`, 'success');
+            renderUI();
+        }
+
+        async function autoMineL2Loop() {
+            if (document.getElementById('auto-mine-l2-toggle').checked) {
+                await mineBlockL2();
+                setTimeout(autoMineL2Loop, 2000);
+            }
+        }
+
+        function toggleAutoMiningL2() {
+            if (document.getElementById('auto-mine-l2-toggle').checked) {
+                log('⛏️ Mineração automática L2 iniciada.', 'success');
+                autoMineL2Loop();
+            } else {
+                log('Mineração automática L2 pausada.', 'warning');
+            }
+        }
+
+        // =========================================================
+        // Snapshot / Backup
+        // =========================================================
+
+        function exportSnapshot() {
+            const snapshot = {
+                node: node
+            };
+            const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `unit_snapshot_${new Date().toISOString()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            log('Snapshot exportado.', 'success');
+        }
+
+        function importSnapshot(event) {
+            const file = event.target.files && event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (data && data.node) {
+                        // shallow restore (be careful with real secrets)
+                        node.id = data.node.id || node.id;
+                        node.walletAddress = data.node.walletAddress || node.walletAddress;
+                        node.chains = data.node.chains || node.chains;
+                        node.pendingTransactions = data.node.pendingTransactions || [];
+                        node.pendingSidechainTransactions = data.node.pendingSidechainTransactions || [];
+                        node.balance = data.node.balance || 0;
+                        node.sideChainBalance = data.node.sideChainBalance || 0;
+                        node.stake = data.node.stake || 0;
+                        node.pendingStake = data.node.pendingStake || 0;
+                        log('Snapshot importado com sucesso.', 'success');
+                        renderUI();
+                    } else {
+                        log('Formato de snapshot inválido.', 'error');
+                    }
+                } catch (err) {
+                    log('Erro ao importar snapshot: ' + err.message, 'error');
+                }
+            };
+            reader.readAsText(file);
         }
 
         async function sha256(message) {
@@ -502,6 +638,16 @@
                 type: 'BRIDGE_OUT' 
             });
 
+            // Also register to L2 pending pool for the sidechain miners
+            node.pendingSidechainTransactions.push({
+                from: node.walletAddress,
+                to: SIDE_CHAIN_ID,
+                amount: amount,
+                fee: 0,
+                timestamp: Date.now(),
+                type: 'BRIDGE_OUT'
+            });
+
             node.sideChainBalance += amount;
             
             log(`🌉 Movendo ${amount.toFixed(10)} UNIT para o mundo ${SIDE_CHAIN_ID}.`, 'bridge');
@@ -540,6 +686,10 @@
             document.getElementById("difficulty-input").addEventListener('change', renderUI);
             log("Sistema pronto. Faça login.", 'info');
             renderUI();
+            // Ensure L2 chain exists even before login
+            if (!node.chains[SIDE_CHAIN_ID]) {
+                createGenesisL2().then(gen => { node.chains[SIDE_CHAIN_ID] = gen; renderUI(); });
+            }
         }
     </script>
 </body>
