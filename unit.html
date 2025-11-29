@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UNIT Hub-Chains - Simulação de Blockchain Híbrida, Pool e Bridge</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Estilos CSS para a UI */
+        .input-style { padding: 0.5rem; border-radius: 0.375rem; border: 1px solid #4b5563; background-color: #1f2937; color: #d1d5db; width: 100%; margin-bottom: 0.5rem; }
+        .btn-primary { padding: 0.75rem 1.5rem; border-radius: 0.375rem; background-color: #f59e0b; color: #1f2937; font-weight: 600; cursor: pointer; width: 100%; margin-bottom: 0.5rem; }
+        .btn-secondary { padding: 0.75rem 1.5rem; border-radius: 0.375rem; background-color: #4b5563; color: #f9fafb; font-weight: 600; cursor: pointer; width: 100%; margin-bottom: 0.5rem; }
+        .card { background-color: #111827; padding: 1.5rem; border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
+        #logs, #chain-display { height: 300px; overflow-y: scroll; background-color: #1f2937; padding: 0.5rem; border-radius: 0.25rem; font-family: monospace; }
+        /* Scrollbar customizada */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1f2937; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+    </style>
+</head>
+<body class="bg-gray-800 text-gray-300 p-8">
+
+    <header class="text-center mb-10">
+        <h1 class="text-4xl font-extrabold text-yellow-400">UNIT Hub-Chains</h1>
+        <p class="text-gray-400 mt-2">Simulação de Blockchain Híbrida e Bridge (Transferência Cross-Chain)</p>
+        <p class="text-sm mt-1">Seu ID de Peer: <span id="node-id" class="font-mono text-green-400">...</span></p>
+        <p class="text-sm mt-1">Saldo <span class="text-yellow-400 font-bold">HUB (L1)</span>: <span id="current-balance" class="font-mono text-yellow-300">0.00 UNIT</span> | Saldo <span class="text-indigo-400 font-bold">META_GAME (L2)</span>: <span id="current-sidechain-balance" class="font-mono text-indigo-300">0.00 UNIT</span></p>
+    </header>
+
+    <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        <div class="lg:col-span-2 space-y-8">
+            <div class="card">
+                <h2 class="text-xl font-semibold mb-3 text-white">👤 Login / Registro da Conta-Nó</h2>
+                <input type="text" id="user-name" class="input-style" placeholder="Usuário (Nome Único)">
+                <input type="password" id="user-password" class="input-style" placeholder="Senha (Mínimo 6 Caracteres)">
+                <button id="login-btn" onclick="handleLogin()" class="btn-secondary">
+                    Acessar Conta / Registrar Novo Nó
+                </button>
+                <p id="login-status" class="text-sm mt-2 text-yellow-400"></p>
+            </div>
+
+            <div class="card">
+                <h2 class="text-xl font-semibold mb-3 text-red-400">⛏️ Mineração (PoW Cooperativa no HUB)</h2>
+                <div class="flex items-center gap-4 mb-4">
+                    <p class="text-sm">Dificuldade da Rede:</p>
+                    <input type="number" id="difficulty-input" value="9" min="1" max="11" class="input-style w-24"> 
+                    <p class="text-sm"><span id="current-difficulty" class="font-bold">9</span> Zeros Iniciais</p>
+                </div>
+                <div class="flex items-center justify-between gap-4 mb-4 p-2 bg-gray-700 rounded">
+                    <label for="auto-mine-toggle" class="text-white">Mineração Automática:</label>
+                    <input type="checkbox" id="auto-mine-toggle" class="form-checkbox h-5 w-5 text-red-600" onchange="toggleAutoMining()">
+                </div>
+                <button onclick="mineBlock()" class="btn-primary">Iniciar Mineração Manual</button>
+            </div>
+            
+            <div class="card bg-indigo-900/30 border border-indigo-700">
+                <h2 class="text-xl font-semibold mb-3 text-indigo-300">🌉 UNIT Bridge: Cross-Chain (L1 ↔ L2)</h2>
+                <p class="text-sm mb-4 font-bold text-gray-200">
+                    Saldo em META_GAME_ZONE (L2): 
+                    <span id="side-chain-balance" class="font-mono text-indigo-400 text-lg">0.00 UNIT</span>
+                </p>
+                
+                <div class="mb-4 p-3 bg-indigo-800/50 rounded border border-indigo-600">
+                    <p class="text-xs text-indigo-200 mb-2 font-semibold">📤 Enviar para L2 (HUB → META_GAME)</p>
+                    <div class="flex gap-4">
+                        <input type="number" id="bridge-amount" class="input-style" placeholder="Valor para Enviar (UNIT HUB)" min="1" step="1">
+                        <button onclick="bridgeToSidechain()" class="btn-primary bg-indigo-500 hover:bg-indigo-600 w-40">
+                            BRIDGE_OUT
+                        </button>
+                    </div>
+                </div>
+
+                <div class="p-3 bg-indigo-800/50 rounded border border-indigo-600">
+                    <p class="text-xs text-indigo-200 mb-2 font-semibold">📥 Retornar para L1 (META_GAME → HUB)</p>
+                    <div class="flex gap-4">
+                        <input type="number" id="bridge-return-amount" class="input-style" placeholder="Valor para Retornar (UNIT L2)" min="1" step="1">
+                        <button onclick="bridgeFromSidechain()" class="btn-primary bg-purple-600 hover:bg-purple-700 w-40">
+                            BRIDGE_IN
+                        </button>
+                    </div>
+                </div>
+                
+                <p class="text-xs mt-3 text-gray-400">
+                    <span class="text-indigo-300 font-semibold">BRIDGE_OUT:</span> Transfere UNIT do HUB (L1) para META_GAME_ZONE (L2) via transação registrada.<br>
+                    <span class="text-purple-300 font-semibold">BRIDGE_IN:</span> Retorna UNIT da META_GAME_ZONE (L2) para HUB (L1) via transação de retorno.
+                </p>
+            </div>
+
+            <div class="card">
+                <h2 class="text-xl font-semibold mb-3 text-indigo-400">⚡ Staking PoS</h2>
+                <p class="text-sm mb-4">Mínimo para Validação: <span class="font-bold">50 UNIT</span></p>
+                <div class="grid grid-cols-3 gap-4">
+                    <input type="number" id="stake-amount" class="input-style col-span-2" placeholder="Valor para Stake (UNIT)" min="50" step="10">
+                    <button onclick="stake()" class="btn-secondary col-span-1">Apostar (STAKE)</button>
+                </div>
+                <p class="text-sm mt-2">Seu Stake Atual: <span id="current-stake" class="font-mono text-indigo-300">0.00 UNIT</span></p>
+            </div>
+            
+            <div class="card">
+                <h2 class="text-xl font-semibold mb-3 text-yellow-400">💰 Transações Pendentes (UNIT HUB)</h2>
+                <input type="text" id="tx-from" class="input-style bg-gray-700 text-green-300 mb-4" readonly value="Aguardando Login..." placeholder="Seu Endereço (Wallet)">
+                <div class="flex gap-4 mb-4">
+                    <input type="text" id="tx-to" class="input-style" placeholder="Destinatário (Hash Curto)">
+                    <input type="number" id="tx-amount" class="input-style" placeholder="Valor (UNIT)" min="0.0000000001" step="0.0000000001" value="5">
+                </div>
+                <button onclick="addTransaction()" class="btn-primary">
+                    Enviar UNIT para Pool (<span id="pending-tx-count">0</span> Pendentes)
+                </button>
+            </div>
+        </div>
+
+        <div class="lg:col-span-1 space-y-8">
+            <div class="card">
+                <h2 class="text-xl font-semibold mb-3 text-blue-400">📜 Logs da Rede</h2>
+                <div id="logs" class="text-xs font-mono rounded flex flex-col-reverse"></div>
+            </div>
+            <div class="card">
+                <h2 class="text-xl font-semibold mb-3 text-cyan-400">⛓️ Cadeia L1: UNIT HUB</h2>
+                <div id="chain-display" class="text-xs font-mono rounded"></div>
+            </div>
+            <div class="card">
+                <h2 class="text-xl font-semibold mb-3 text-purple-400">⛓️ Cadeia L2: META_GAME_ZONE</h2>
+                <div id="chain-display-l2" class="text-xs font-mono rounded"></div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // =========================================================
+        // VARIÁVEIS GLOBAIS
+        // =========================================================
+        const STORAGE_KEY = 'UNIT_NODE_DB_V5'; // Versão atualizada
+        const POOL_SIZE = 5; 
+        const node = {
+            id: '...',
+            walletAddress: 'Aguardando Login...',
+            chains: {}, 
+            pendingTransactions: [],
+            pendingStake: 0, 
+            stake: 0,
+            balance: 0,
+            sideChainBalance: 0, 
+            autoMiningInterval: null 
+        };
+        const MAIN_CHAIN_ID = 'UNIT_HUB'; 
+        const SIDE_CHAIN_ID = 'META_GAME_ZONE'; 
+        
+        // TO-DO Avançado: Implementar o ID Único (NFT/Serial Number) para cada UNIT.
+        // Isso exigiria reescrever node.balance como um array/map de objetos UNIT_SN#.
+        
+        // =========================================================
+        // FUNÇÕES UTILITÁRIAS & CORE BLOCKCHAIN
+        // =========================================================
+
+        function log(msg, type = 'info') {
+            const logsDiv = document.getElementById("logs");
+            const now = new Date().toLocaleTimeString('pt-BR');
+            let color = 'text-gray-400';
+            if (type === 'error') color = 'text-red-400';
+            if (type === 'success') color = 'text-green-400';
+            if (type === 'warning') color = 'text-yellow-400';
+            if (type === 'bridge') color = 'text-indigo-300';
+            const logEntry = `<div class="${color}">[${now}] ${msg}</div>`;
+            logsDiv.innerHTML = logEntry + logsDiv.innerHTML;
+        }
+
+        async function sha256(message) {
+            let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+            for (let i = 0; i < message.length; i++) {
+                let ch = message.charCodeAt(i);
+                h1 = Math.imul(h1 ^ ch, 2654435761);
+                h2 = Math.imul(h2 ^ ch, 1597334677);
+            }
+            h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+            h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+            
+            const hashPart = (h2 >>> 0).toString(16).padStart(8,0) + (h1 >>> 0).toString(16).padStart(8,0);
+            return (hashPart + hashPart + hashPart + hashPart).substring(0, 64);
+        }
+
+        async function hashBlock(block) {
+            const dataStr = JSON.stringify(block.data) + block.prevHash + block.nonce + block.timestamp;
+            return await sha256(dataStr);
+        }
+
+        function saveNodeState(userName, nodeData) {
+            let db = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+            db[userName] = { id: nodeData.id, walletAddress: nodeData.walletAddress };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+        }
+
+        function loadNodeState(userName) {
+            let db = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+            return db[userName];
+        }
+
+        async function createGenesis() {
+            const block = {
+                index: 0,
+                timestamp: Date.now(),
+                data: { genesis: true, reward: 100 },
+                prevHash: "0".repeat(64),
+                nonce: 0,
+                chainId: MAIN_CHAIN_ID, 
+                miner: 'SYSTEM',
+                transactions: [{ from: 'SYSTEM', to: node.walletAddress, amount: 100, type: 'GENESIS' }] 
+            };
+            block.hash = await hashBlock(block);
+            return [block];
+        }
+
+        async function createGenesisL2() {
+            const block = {
+                index: 0,
+                timestamp: Date.now(),
+                data: { genesis: true, sidechain: true },
+                prevHash: "0".repeat(64),
+                nonce: 0,
+                chainId: SIDE_CHAIN_ID, 
+                miner: 'SYSTEM_L2',
+                transactions: [{ from: 'SYSTEM_L2', to: 'INITIAL', amount: 0, type: 'GENESIS_L2' }] 
+            };
+            block.hash = await hashBlock(block);
+            return [block];
+        }
+
+        function updateBalance(block) {
+            block.transactions.forEach(tx => {
+                const amount = parseFloat(tx.amount || 0);
+                const fee = parseFloat(tx.fee || 0);
+
+                if (tx.to === node.walletAddress) {
+                    if (tx.type === 'BRIDGE_IN') {
+                        node.balance += amount;
+                    } else {
+                        node.balance += amount;
+                    }
+                }
+                
+                if (tx.from === node.walletAddress) {
+                    if(tx.type === 'TRANSFER' || tx.type === 'STAKE') {
+                        if (tx.type === 'STAKE') {
+                            node.stake += amount;
+                            node.pendingStake -= amount;
+                        }
+                    }
+                    if(tx.type === 'BRIDGE_OUT') {
+                         log(`🌉 BRIDGE_OUT de ${amount.toFixed(10)} UNIT processada. Fundos movidos para META_GAME_ZONE (L2).`, 'bridge');
+                    }
+                    if(tx.type === 'BRIDGE_IN') {
+                         log(`🌉 BRIDGE_IN de ${amount.toFixed(10)} UNIT processada. Fundos retornados do META_GAME_ZONE (L2) para HUB (L1).`, 'bridge');
+                    }
+                }
+            });
+        }
+
+        function renderUI() {
+            if (!node.chains[MAIN_CHAIN_ID]) return;
+            
+            document.getElementById("node-id").textContent = node.id.substring(0, 8) + '...';
+            document.getElementById("tx-from").value = node.walletAddress;
+            // Usa toFixed(10) para exibir a alta precisão do UNIT
+            document.getElementById("current-balance").textContent = `${node.balance.toFixed(10)} UNIT`; 
+            document.getElementById("current-sidechain-balance").textContent = `${node.sideChainBalance.toFixed(10)} UNIT`;
+            document.getElementById("side-chain-balance").textContent = `${node.sideChainBalance.toFixed(10)} UNIT`;
+            document.getElementById("current-stake").textContent = `${(node.stake + node.pendingStake).toFixed(10)} UNIT`; 
+            document.getElementById("pending-tx-count").textContent = node.pendingTransactions.length;
+            
+            const difficulty = parseInt(document.getElementById("difficulty-input").value) || 3;
+            document.getElementById("current-difficulty").textContent = difficulty;
+            
+            // Renderizar Cadeia L1
+            const chainDiv = document.getElementById("chain-display");
+            chainDiv.innerHTML = "";
+            const chain = node.chains[MAIN_CHAIN_ID];
+
+            chain.slice().reverse().forEach(block => {
+                let type = block.index === 0 ? 'Gênese' : 'PoW';
+                let rewardText = 'N/A';
+                
+                if (block.poolShare) {
+                    // Usa toFixed(10) para exibir a alta precisão da recompensa
+                    rewardText = `${block.poolShare.toFixed(10)} UNIT (Pool Share)`; 
+                    if (block.transactions.some(tx => tx.type === 'REWARD_POS_SHARE')) {
+                        type = 'Coop/PoS';
+                    } else {
+                        type = 'Pool PoW';
+                    }
+                }
+
+                chainDiv.innerHTML += `
+                    <div class="border-b border-gray-600 py-2">
+                        <span class="text-cyan-300">#${block.index}</span> (${type})
+                        <br><span class="text-xs text-gray-400">Hash: ${block.hash.substring(0, 16)}...</span>
+                        <br>Miner: ${block.miner.substring(0, 8)}... | Recompensa: ${rewardText}
+                    </div>`;
+            });
+
+            // Renderizar Cadeia L2
+            const chainDivL2 = document.getElementById("chain-display-l2");
+            chainDivL2.innerHTML = "";
+            const chainL2 = node.chains[SIDE_CHAIN_ID];
+            
+            if (chainL2 && chainL2.length > 0) {
+                chainL2.slice().reverse().forEach(block => {
+                    let type = block.index === 0 ? 'Gênese' : 'Transação';
+                    
+                    chainDivL2.innerHTML += `
+                        <div class="border-b border-purple-600 py-2">
+                            <span class="text-purple-300">#${block.index}</span> (${type})
+                            <br><span class="text-xs text-gray-400">Hash: ${block.hash.substring(0, 16)}...</span>
+                            <br>Txs: ${block.transactions.length}
+                        </div>`;
+                });
+            } else {
+                chainDivL2.innerHTML = '<div class="text-gray-500 text-xs p-2">Cadeia L2 vazia. Execute BRIDGE_OUT para iniciar.</div>';
+            }
+        }
+
+        // =========================================================
+        // LÓGICA COOPERATIVA & BRIDGE
+        // =========================================================
+
+        async function mineBlock() {
+            if (node.walletAddress.startsWith('Aguardando')) return;
+            
+            const chainId = MAIN_CHAIN_ID;
+            const chain = node.chains[chainId];
+            if (!chain) return;
+
+            const difficulty = parseInt(document.getElementById("difficulty-input").value) || 9;
+            const prev = chain[chain.length - 1];
+            let nonce = 0;
+            let hash = "";
+            const startTime = Date.now();
+            
+            log(`⛏️ Minerando Bloco ${prev.index + 1} no Pool Cooperativo...`, 'warning');
+
+            const rewardPoW_Total = 50.0;
+            const rewardPoS_Total = node.stake > 0 ? 50.0 : 0.0; 
+            const totalReward = rewardPoW_Total + rewardPoS_Total;
+            
+            const poolShare = totalReward / POOL_SIZE;
+
+            const rewardTx = { 
+                from: 'POOL_SYSTEM', 
+                to: node.walletAddress, 
+                // Garante que o valor da recompensa seja float
+                amount: parseFloat(poolShare.toFixed(10)), 
+                fee: 0, 
+                timestamp: Date.now(), 
+                type: node.stake > 0 ? 'REWARD_POS_SHARE' : 'REWARD_POW_SHARE'
+            };
+
+            let transactionsForBlock = [rewardTx, ...node.pendingTransactions];
+            
+            // LOOP DE POW (SIMULAÇÃO DE ENCONTRO RÁPIDO PELO POOL)
+            let found = false;
+            while (!found) {
+                // Aumenta o limite de iterações para lidar com dificuldade alta
+                for(let i=0; i<1000; i++) { 
+                    nonce++;
+                    const blockData = { index: prev.index + 1, timestamp: Date.now(), data: {}, prevHash: prev.hash, nonce: nonce, chainId, miner: node.walletAddress, transactions: transactionsForBlock };
+                    hash = await hashBlock(blockData);
+                    
+                    const poolDifficulty = Math.min(4, difficulty); 
+                    const poolTargetPrefix = "0".repeat(poolDifficulty);
+
+                    if (hash.startsWith(poolTargetPrefix)) { 
+                        found = true;
+                        // Simula que o Pool encontrou o hash real, mesmo com dificuldade alta
+                        if(difficulty > poolDifficulty) {
+                             hash = "0".repeat(difficulty) + hash.substring(difficulty); 
+                        }
+                        break;
+                    }
+                }
+                
+                if (!found) await new Promise(r => setTimeout(r, 0));
+                
+                if (nonce > 100000 && !found) {
+                    nonce = 0; 
+                }
+            }
+            
+            const finalBlock = { 
+                index: prev.index + 1, timestamp: Date.now(), data: {}, prevHash: prev.hash, nonce: nonce, chainId: chainId, hash: hash, miner: node.walletAddress, transactions: transactionsForBlock, poolShare: poolShare
+            };
+
+            chain.push(finalBlock);
+            updateBalance(finalBlock);
+            node.pendingTransactions = []; 
+            
+            const timeTaken = ((Date.now() - startTime) / 1000).toFixed(2);
+            log(`🥳 Bloco ${finalBlock.index} MINERADO pelo Pool (${timeTaken}s)`, 'success');
+            
+            renderUI();
+        }
+
+        async function autoMineLoop() {
+            if (document.getElementById("auto-mine-toggle").checked) {
+                await mineBlock();
+                node.autoMiningInterval = setTimeout(autoMineLoop, 1000); 
+            } else {
+                log('Mineração auto pausada.', 'warning');
+            }
+        }
+
+        function toggleAutoMining() {
+            if (document.getElementById("auto-mine-toggle").checked) {
+                log(`⛏️ Mineração Cooperativa iniciada (Pool de ${POOL_SIZE} nós).`, 'success');
+                if (node.autoMiningInterval) clearTimeout(node.autoMiningInterval);
+                autoMineLoop();
+            } else {
+                if (node.autoMiningInterval) clearTimeout(node.autoMiningInterval);
+                node.autoMiningInterval = null;
+            }
+        }
+
+        async function handleLogin() {
+            const user = document.getElementById('user-name').value;
+            const pass = document.getElementById('user-password').value;
+            if (!user || pass.length < 6) return alert('Preencha usuário e senha (mín 6 chars).');
+            
+            const saved = loadNodeState(user);
+            const addrHash = await sha256(user + pass);
+            const addr = MAIN_CHAIN_ID + '_' + addrHash.substring(0, 16) + '...';
+
+            if (saved) {
+                node.id = saved.id;
+                node.walletAddress = saved.walletAddress;
+                log(`🔑 Bem-vindo ${user}!`, 'success');
+            } else {
+                node.id = addrHash.substring(0, 8);
+                node.walletAddress = addr;
+                saveNodeState(user, node);
+                log(`🎉 Nó ${user} criado!`, 'success');
+            }
+
+            if (node.autoMiningInterval) clearTimeout(node.autoMiningInterval);
+            node.balance = 0; node.stake = 0; node.pendingStake = 0; node.pendingTransactions = []; node.sideChainBalance = 0;
+            
+            node.chains[MAIN_CHAIN_ID] = await createGenesis();
+            node.chains[SIDE_CHAIN_ID] = await createGenesisL2();
+            updateBalance(node.chains[MAIN_CHAIN_ID][0]);
+            
+            renderUI();
+            
+            document.getElementById("auto-mine-toggle").checked = true;
+            toggleAutoMining();
+        }
+
+        function addTransaction() {
+            if (node.walletAddress.startsWith('Aguardando')) return alert('Faça login.');
+            const amount = parseFloat(document.getElementById('tx-amount').value);
+            const fee = 1.0; 
+            
+            if (node.balance < amount + fee) return log('Saldo insuficiente.', 'error');
+            
+            node.pendingTransactions.push({ 
+                from: node.walletAddress, 
+                to: document.getElementById('tx-to').value || 'Unknown', 
+                amount: amount, fee: fee, timestamp: Date.now(), type: 'TRANSFER' 
+            });
+            
+            node.balance -= (amount + fee); 
+            
+            log(`Tx de ${amount.toFixed(10)} UNIT enviada ao pool (Custo: ${amount+fee} UNIT).`, 'info');
+            renderUI();
+        }
+
+        function stake() {
+            if (node.walletAddress.startsWith('Aguardando')) return alert('Faça login.');
+            const amount = parseFloat(document.getElementById('stake-amount').value);
+            if (amount < 50 || node.balance < amount) return log('Mínimo 50 UNIT ou Saldo insuficiente.', 'error');
+            
+            node.pendingTransactions.push({ 
+                from: node.walletAddress, to: 'STAKE_POOL', amount: amount, fee: 0, timestamp: Date.now(), type: 'STAKE' 
+            });
+            node.pendingStake += amount;
+            node.balance -= amount; 
+            log(`Stake de ${amount.toFixed(10)} solicitado.`, 'warning');
+            renderUI();
+        }
+
+        function bridgeToSidechain() {
+            if (node.walletAddress.startsWith('Aguardando')) return alert('Faça login.');
+            const amount = parseFloat(document.getElementById('bridge-amount').value);
+            
+            if (isNaN(amount) || amount <= 0) return log('Valor de Bridge inválido.', 'error');
+            if (node.balance < amount) return log('Saldo insuficiente no UNIT HUB.', 'error');
+            
+            node.balance -= amount; 
+            
+            node.pendingTransactions.push({ 
+                from: node.walletAddress, 
+                to: SIDE_CHAIN_ID, 
+                amount: amount, 
+                fee: 0, 
+                timestamp: Date.now(), 
+                type: 'BRIDGE_OUT' 
+            });
+
+            node.sideChainBalance += amount;
+            
+            log(`🌉 Movendo ${amount.toFixed(10)} UNIT para o mundo ${SIDE_CHAIN_ID}.`, 'bridge');
+            log(`Tx de Bridge adicionada à pool de mineração do HUB. Será confirmada no próximo bloco.`, 'warning');
+            
+            document.getElementById('bridge-amount').value = '';
+            renderUI();
+        }
+
+        function bridgeFromSidechain() {
+            if (node.walletAddress.startsWith('Aguardando')) return alert('Faça login.');
+            const amount = parseFloat(document.getElementById('bridge-return-amount').value);
+            
+            if (isNaN(amount) || amount <= 0) return log('Valor de Bridge inválido.', 'error');
+            if (node.sideChainBalance < amount) return log('Saldo insuficiente na META_GAME_ZONE (L2).', 'error');
+            
+            node.sideChainBalance -= amount;
+            
+            node.pendingTransactions.push({ 
+                from: SIDE_CHAIN_ID, 
+                to: node.walletAddress, 
+                amount: amount, 
+                fee: 0, 
+                timestamp: Date.now(), 
+                type: 'BRIDGE_IN' 
+            });
+            
+            log(`🌉 Retornando ${amount.toFixed(10)} UNIT do mundo ${SIDE_CHAIN_ID} para HUB (L1).`, 'bridge');
+            log(`Tx de Bridge de Retorno adicionada à pool de mineração. Será confirmada no próximo bloco.`, 'warning');
+            
+            document.getElementById('bridge-return-amount').value = '';
+            renderUI();
+        }
+
+        window.onload = () => {
+            document.getElementById("difficulty-input").addEventListener('change', renderUI);
+            log("Sistema pronto. Faça login.", 'info');
+            renderUI();
+        }
+    </script>
+</body>
+</html>
